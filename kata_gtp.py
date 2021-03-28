@@ -48,8 +48,8 @@ def make_gtp_instance(save_dir, cgos_mode=False, kgs_mode=False,
     """Takes a path to model files and set up a GTP engine instance."""
     # Here so we dont try load EdgeTPU python library unless we need to
 
-    load_file = os.path.join(saved_model_dir,"variables","variables")
-    model_config = os.path.join(saved_model_dir,"model.config.json")
+    load_file = os.path.join(saved_dir,"variables","variables")
+    model_config = os.path.join(saved_dir,"model.config.json")
 
     if load_file.endswith(".tflite"):
         from dual_net_edge_tpu import DualNetworkEdgeTpu
