@@ -189,8 +189,7 @@ class MCTSNode(object):
         if fcoord not in self.children:
             new_position = self.position.play_move(
                 coords.from_flat(fcoord))
-            new_game_state = self.game_state.play_move(
-                coords.from_flat(fcoord))
+            new_game_state = self.game_state.play_move(fcoord)
             self.children[fcoord] = MCTSNode(
                 new_position, new_game_state, fmove=fcoord, parent=self)
         return self.children[fcoord]
