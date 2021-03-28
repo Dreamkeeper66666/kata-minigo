@@ -133,7 +133,7 @@ class Model:
     "whiteKomi": 7.5
     }
     self.sess = tf.compat.v1.Session()
-    self.initialize_weights()
+    self.initialize_weights(save_file)
 
   def initialize_weights(self, save_file):
     """Initialize the weights from the given save_file.
@@ -1272,7 +1272,7 @@ class Model:
     return probs[0], values[0]
 
   def run_many(self, game_states):
-    batch_size = game_states.shape[0]
+    batch_size = len(game_states)
     bin_input_data = np.zeros(shape=[batch_size]+self.bin_input_shape, dtype=np.float32)
     global_input_data = np.zeros(shape=[batch_size]+self.global_input_shape, dtype=np.float32)
 
@@ -1281,13 +1281,13 @@ class Model:
       pla = gs.board.pla
       opp = Board.get_opp(pla)
       move_idx = len(gs.moves)
-      model.fill_row_features(gs.board,pla,opp,gs.boards,gs.moves,move_idx,rules,bin_input_data,global_input_data,idx=i)
+      self.fill_row_features(gs.board,pla,opp,gs.boards,gs.moves,move_idx,self.rules,bin_input_data,global_input_data,idx=i)
 
-    [policys, values] = session.run(fetches, feed_dict={
-      model.bin_inputs: bin_input_data,
-      model.global_inputs: global_input_data,
-      model.symmetries: [[False,False,False]] * batch_size,
-      model.include_history: [[1.0,1.0,1.0,1.0,1.0]] * batch_size
+    [policys, values] = self.sess.run(self.fetches, feed_dict={
+      self.bin_inputs: bin_input_data,
+      self.global_inputs: global_input_data,
+      self.symmetries: [False,False,False],
+      self.include_history: [[1.0,1.0,1.0,1.0,1.0]] * batch_size
     })
     policy = policys
     value = np.zeros(shape=[batch_size], dtype=np.float32)

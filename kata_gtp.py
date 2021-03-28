@@ -16,13 +16,14 @@
 
 import os
 import sys
+import json
 
 from absl import app, flags
 
 from gtp_cmd_handlers import (
     BasicCmdHandler, KgsCmdHandler, GoGuiCmdHandler, MiniguiBasicCmdHandler, RegressionsCmdHandler)
 import gtp_engine
-from strategies_kata import MCTSPlayer, CGOSPlayer
+from kata_strategies import MCTSPlayer, CGOSPlayer
 from utils import dbg
 import tensorflow as tf
 
@@ -44,13 +45,16 @@ flags.DEFINE_string('name_scope', None, 'Name scope of model file.')
 FLAGS = flags.FLAGS
 
 
-def make_gtp_instance(save_dir, cgos_mode=False, kgs_mode=False,
+def make_gtp_instance(save_dir, name_scope, cgos_mode=False, kgs_mode=False,
                       minigui_mode=False):
     """Takes a path to model files and set up a GTP engine instance."""
     # Here so we dont try load EdgeTPU python library unless we need to
 
     load_file = os.path.join(save_dir,"variables","variables")
-    model_config = os.path.join(save_dir,"model.config.json")
+    model_config_json = os.path.join(save_dir,"model.config.json")
+
+    with open(model_config_json) as f:
+        model_config = json.load(f)
 
     if load_file.endswith(".tflite"):
         from dual_net_edge_tpu import DualNetworkEdgeTpu
@@ -58,7 +62,7 @@ def make_gtp_instance(save_dir, cgos_mode=False, kgs_mode=False,
     else:
         from kata_net import Model
         with tf.compat.v1.variable_scope(name_scope):
-            n = Model(load_file, model_config, pos_len,{})
+            n = Model(load_file, model_config, 19, {})
 
     if cgos_mode:
         player = CGOSPlayer(network=n, seconds_per_move=5, timed_match=True,
@@ -89,6 +93,7 @@ def main(argv):
     """Run Minigo in GTP mode."""
     del argv
     engine = make_gtp_instance(FLAGS.save_dir,
+                                FLAGS.name_scope,
                                cgos_mode=FLAGS.cgos_mode,
                                kgs_mode=FLAGS.kgs_mode,
                                minigui_mode=FLAGS.minigui_mode)

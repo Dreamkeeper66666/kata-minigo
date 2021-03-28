@@ -23,6 +23,7 @@ import math
 
 from absl import flags
 import numpy as np
+from kata_board import Board
 
 import coords
 import go
@@ -57,11 +58,11 @@ class GameState:
     self.to_play = to_play
 
   def play_move(self, move):
-    new_game_state = self
-    pla = new_game_state.board.pla
-    new_game_state.board.play(pla, move)
-    new_game_state.to_play *= -1
-    return new_game_state
+    #new_game_state = self
+    #pla = new_game_state.board.pla
+    #new_game_state.board.play(pla, move)
+    #new_game_state.to_play *= -1
+    return GameState(self.board_size, -self.to_play)
 
 
 

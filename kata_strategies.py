@@ -121,7 +121,7 @@ class MCTSPlayer(MCTSPlayerInterface):
         if game_state is None:
             game_state = kata_mcts.GameState(board_size=19, to_play=1)
 
-        self.root = mcts.MCTSNode(position, game_state)
+        self.root = kata_mcts.MCTSNode(position, game_state)
         self.result = 0
         self.result_string = None
         self.comments = []
