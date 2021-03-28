@@ -1,11 +1,11 @@
-Kata-Minigo: Load and run KataGo's TensorFlow weights with MiniGo GTP
+Kata-MiniGo: Load and run KataGo's TensorFlow weights with MiniGo GTP
 ==================================================
 
 
-Playing Against Kata-Minigo
+Playing Against Kata-MiniGo
 ----------------------
 
-Download the latest katago TF model at https://katagotraining.org/networks/
+Download the latest KataGo TF model at https://katagotraining.org/networks/
 
 ```shell
 # Latest model should look like: /path/to/models/kata1-b40c256-sxxx-dxxx/saved_model/
