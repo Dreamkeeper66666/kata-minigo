@@ -51,12 +51,13 @@ FLAGS = flags.FLAGS
 
 class GameState:
   def __init__(self, board_size, to_play=1, copy_other=None):
-    self.board_size = board_size
-    self.board = Board(size=board_size)
-    self.moves = []
-    self.boards = [self.board.copy()]
-    self.to_play = to_play
-    if copy_other is not None:
+    if copy_other is None:
+        self.board_size = board_size
+        self.board = Board(size=board_size)
+        self.moves = []
+        self.boards = [self.board.copy()]
+        self.to_play = to_play
+    else:
         self.board_size = copy_other.board_size
         self.board = copy_other.board.copy()
         self.moves = copy_other.moves.copy()
