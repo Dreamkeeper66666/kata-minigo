@@ -62,6 +62,7 @@ class GameState:
         self.board = copy_other.board.copy()
         self.moves = copy_other.moves.copy()
         self.boards = copy_other.boards.copy()
+        self.to_play = copy_other.to_play
 
   def copy(self):
     return GameState(self.board_size,to_play=self.to_play, copy_other=self)
