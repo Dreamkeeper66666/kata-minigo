@@ -24,6 +24,7 @@ from gtp_cmd_handlers import (
 import gtp_engine
 from strategies_kata import MCTSPlayer, CGOSPlayer
 from utils import dbg
+import tensorflow as tf
 
 
 flags.DEFINE_bool('cgos_mode', False, 'Whether to use CGOS settings.')
