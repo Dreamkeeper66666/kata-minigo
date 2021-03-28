@@ -9,7 +9,9 @@ Download the latest katago TF model at https://katagotraining.org/networks/
 
 ```shell
 # Latest model should look like: /path/to/models/kata1-b40c256-sxxx-dxxx/saved_model/
-!python kata_gtp.py --save_dir ./kata1-b40c256-s7306904576-d1772668053/saved_model/ --num_readouts=1000 --verbose=3 --name_scope swa_model
+LATEST_MODEL=/path/to/models/kata1-b40c256-sxxx-dxxx/saved_model/
+READOUTS=1600
+python kata_gtp.py --save_dir=$LATEST_MODEL --num_readouts=$READOUTS --verbose=3 --name_scope=swa_model
 ```
 
 After some loading messages, it will display `GTP engine ready`, at which point
@@ -28,7 +30,7 @@ speaks GTP.) You can download the gogui set of tools at
 GTP](http://gogui.sourceforge.net/doc/reference-twogtp.html).
 
 ```shell
-gogui-twogtp -black 'python3 gtp.py --load_file=$LATEST_MODEL' -white 'gogui-display' -size 19 -komi 7.5 -verbose -auto
+gogui-twogtp -black 'python3 gtp.py --save_dir=$LATEST_MODEL --name_scope=swa_model' -white 'gogui-display' -size 19 -komi 7.5 -verbose -auto
 ```
 
 Another way to play via GTP is to watch it play against GnuGo, while
