@@ -48,6 +48,11 @@ flags.register_validator('dirichlet_noise_weight', lambda x: 0 <= x < 1)
 
 FLAGS = flags.FLAGS
 
+colstr = 'ABCDEFGHJKLMNOPQRST'
+def parse_coord(s,board):
+  if s == 'pass':
+    return Board.PASS_LOC
+  return board.loc(colstr.index(s[0].upper()), board.size - int(s[1:]))
 
 class GameState:
   def __init__(self, board_size, to_play=1, copy_other=None):
@@ -67,11 +72,12 @@ class GameState:
   def copy(self):
     return GameState(self.board_size,to_play=self.to_play, copy_other=self)
 
-  def play_move(self, coor):
-    move = self.board.loc(coor[0],coor[1])
+
+  def play_move(self, gtp_move):
     new_game_state = self.copy()
+    loc = parse_coord(gtp_move,new_game_state.board)
     pla = new_game_state.board.pla
-    new_game_state.board.play(pla, move)
+    new_game_state.board.play(pla, loc)
     new_game_state.to_play *= -1
     return new_game_state
 
@@ -192,7 +198,7 @@ class MCTSNode(object):
             new_position = self.position.play_move(
                 coords.from_flat(fcoord))
             new_game_state = self.game_state.play_move(
-                coords.from_flat(fcoord))
+                coors.to_gtp(coords.from_flat(fcoord)))
             self.children[fcoord] = MCTSNode(
                 new_position, new_game_state, fmove=fcoord, parent=self)
         return self.children[fcoord]
