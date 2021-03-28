@@ -78,6 +78,7 @@ class GameState:
     loc = parse_coord(gtp_move,new_game_state.board)
     pla = new_game_state.board.pla
     new_game_state.board.play(pla, loc)
+    new_game_state.boards[new_game_state.board.copy()]
     new_game_state.to_play *= -1
     return new_game_state
 
