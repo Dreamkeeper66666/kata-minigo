@@ -58,10 +58,10 @@ class GameState:
     self.to_play = to_play
 
   def play_move(self, move):
-    #new_game_state = self
-    #pla = new_game_state.board.pla
-    #new_game_state.board.play(pla, move)
-    #new_game_state.to_play *= -1
+    new_game_state = self.copy()
+    pla = new_game_state.board.pla
+    new_game_state.board.play(pla, move)
+    new_game_state.to_play *= -1
     return GameState(self.board_size, -self.to_play)
 
 
