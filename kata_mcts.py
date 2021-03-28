@@ -67,7 +67,8 @@ class GameState:
   def copy(self):
     return GameState(self.board_size,to_play=self.to_play, copy_other=self)
 
-  def play_move(self, move):
+  def play_move(self, coor):
+    move = self.board.loc(coor[0],coor[1])
     new_game_state = self.copy()
     pla = new_game_state.board.pla
     new_game_state.board.play(pla, move)
@@ -190,7 +191,8 @@ class MCTSNode(object):
         if fcoord not in self.children:
             new_position = self.position.play_move(
                 coords.from_flat(fcoord))
-            new_game_state = self.game_state.play_move(fcoord)
+            new_game_state = self.game_state.play_move(
+                coords.from_flat(fcoord))
             self.children[fcoord] = MCTSNode(
                 new_position, new_game_state, fmove=fcoord, parent=self)
         return self.children[fcoord]
