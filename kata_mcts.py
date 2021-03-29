@@ -54,20 +54,54 @@ def parse_coord(s,board):
     return Board.PASS_LOC
   return board.loc(colstr.index(s[0].upper()), board.size - int(s[1:]))
 
+def replay_game_state(game_state, result):
+    """
+    Wrapper for a go.Position which replays its history.
+    Assumes an empty start position! (i.e. no handicap, and history must be exhaustive.)
+
+    Result must be passed in, since a resign cannot be inferred from position
+    history alone.
+
+    for position_w_context in replay_position(position):
+        print(position_w_context.position)
+    """
+    assert game_state.n == len(game_state.moves), "Position history is incomplete"
+    gs = game_state(komi=game_state.komi)
+    for player_move in gs.moves:
+        next_move = player_move
+        yield GameStateWithContext(game_state, next_move, result)
+        gs = gs.play_move(next_move)
+
 class GameState:
-  def __init__(self, board_size, to_play=1, copy_other=None):
+  def __init__(self, board_size, n=0, komi=7.5, to_play=1, copy_other=None):
     if copy_other is None:
         self.board_size = board_size
         self.board = Board(size=board_size)
         self.moves = []
         self.boards = [self.board.copy()]
         self.to_play = to_play
+        self.n = n
+        self.rules = {
+        "koRule": "KO_POSITIONAL",
+        "scoringRule": "SCORING_AREA",
+        "taxRule": "TAX_NONE",
+        "multiStoneSuicideLegal": True,
+        "hasButton": False,
+        "encorePhase": 0,
+        "passWouldEndPhase": False,
+        "whiteKomi": 7.5
+        }
+        self.komi = self.rules["whiteKomi"]
     else:
         self.board_size = copy_other.board_size
         self.board = copy_other.board.copy()
         self.moves = copy_other.moves.copy()
         self.boards = copy_other.boards.copy()
         self.to_play = copy_other.to_play
+        self.n = copy_other.n
+        self.rules = copy_other.rules
+        self.komi = copy_other.komi
+
 
   def copy(self):
     return GameState(self.board_size,to_play=self.to_play, copy_other=self)
@@ -80,9 +114,69 @@ class GameState:
     new_game_state.board.play(pla, loc)
     new_game_state.moves.append((pla,loc))
     new_game_state.boards.append(new_game_state.board.copy())
+    new_game_state.n += 1
     new_game_state.to_play *= -1
+
     return new_game_state
 
+  def socre(self):
+    board = self.board
+    pla = board.pla
+    opp = Board.get_opp(pla)
+    area = [-1 for i in range(board.arrsize)]
+    nonPassAliveStones = False
+    safeBigTerritories = True
+    unsafeBigTerritories = False
+    board.calculateArea(area,nonPassAliveStones,safeBigTerritories,unsafeBigTerritories,rules["multiStoneSuicideLegal"])
+    return np.count_nonzero(area == Board.BLACK) - np.count_nonzero(area == Board.WHITE) - self.komi
+
+  def is_game_over(self):
+    return (len(self.moves) >= 2 and
+        self.moves[-1][1] == Board.PASS_LOC and
+        self.moves[-2][1] == Board.PASS_LOC)
+
+  def result_string(self):
+    score = self.score()
+    if score > 0:
+        return 'B+' + '%.1f' % score
+    elif score < 0:
+        return 'W+' + '%.1f' % abs(score)
+    else:
+        return 'DRAW'
+
+  def all_legal_moves(self):
+    'Returns a np.array of size go.N**2 + 1, with 1 = legal, 0 = illegal'
+    # by default, every move is legal
+    legal_moves = np.zeros([N, N], dtype=np.int8)
+    # ...unless there is already a stone there
+    legal_moves[self.board != EMPTY] = 0
+    # calculate which spots have 4 stones next to them
+    # padding is because the edge always counts as a lost liberty.
+    adjacent = np.ones([N + 2, N + 2], dtype=np.int8)
+    adjacent[1:-1, 1:-1] = np.abs(self.board)
+    num_adjacent_stones = (adjacent[:-2, 1:-1] + adjacent[1:-1, :-2] +
+                           adjacent[2:, 1:-1] + adjacent[1:-1, 2:])
+    # Surrounded spots are those that are empty and have 4 adjacent stones.
+    surrounded_spots = np.multiply(
+        (self.board == EMPTY),
+        (num_adjacent_stones == 4))
+    # Such spots are possibly illegal, unless they are capturing something.
+    # Iterate over and manually check each spot.
+    for coord in np.transpose(np.nonzero(surrounded_spots)):
+        if self.is_move_suicidal(tuple(coord)):
+            legal_moves[tuple(coord)] = 0
+
+    # ...and retaking ko is always illegal
+    if self.ko is not None:
+        legal_moves[self.ko] = 0
+
+    # and pass is always legal
+    return np.concatenate([legal_moves.ravel(), [1]])     
+
+  def flip_playerturn(self, mutate=False):
+    game_state = self if mutate else self.copy()
+    game_state.to_play *= -1
+    return game_state
 
 
 class DummyNode(object):
@@ -112,17 +206,17 @@ class MCTSNode(object):
     parent: A parent MCTSNode.
     """
 
-    def __init__(self, position, game_state, fmove=None, parent=None):
+    def __init__(self, game_state, fmove=None, parent=None):
         if parent is None:
             parent = DummyNode()
         self.parent = parent
         self.fmove = fmove  # move that led to this position, as flattened coords
-        self.position = position
+        #self.position = position
         self.game_state = game_state
         self.is_expanded = False
         self.losses_applied = 0  # number of virtual losses on this node
         # using child_() allows vectorized computation of action score.
-        self.illegal_moves = 1 - self.position.all_legal_moves()
+        self.illegal_moves = 1 - self.game_state.all_legal_moves()
         self.child_N = np.zeros([go.N * go.N + 1], dtype=np.float32)
         self.child_W = np.zeros([go.N * go.N + 1], dtype=np.float32)
         # save a copy of the original prior before it gets mutated by d-noise.
@@ -132,11 +226,11 @@ class MCTSNode(object):
 
     def __repr__(self):
         return "<MCTSNode move=%s, N=%s, to_play=%s>" % (
-            self.position.recent[-1:], self.N, self.position.to_play)
+            self.game_state.moves[-1][1], self.N, self.game_state.to_play)
 
     @property
     def child_action_score(self):
-        return (self.child_Q * self.position.to_play +
+        return (self.child_Q * self.game_state.to_play +
                 self.child_U - 1000 * self.illegal_moves)
 
     @property
@@ -173,7 +267,7 @@ class MCTSNode(object):
     @property
     def Q_perspective(self):
         """Return value of position, from perspective of player to play."""
-        return self.Q * self.position.to_play
+        return self.Q * self.game_state.to_play
 
     def select_leaf(self):
         current = self
@@ -184,8 +278,8 @@ class MCTSNode(object):
                 break
             # HACK: if last move was a pass, always investigate double-pass first
             # to avoid situations where we auto-lose by passing too early.
-            if (current.position.recent and
-                current.position.recent[-1].move is None and
+            if (current.game_state.moves and
+                current.game_state.moves[-1][1] == Board.PASS_LOC and
                     current.child_N[pass_move] == 0):
                 current = current.maybe_add_child(pass_move)
                 continue
@@ -197,12 +291,11 @@ class MCTSNode(object):
     def maybe_add_child(self, fcoord):
         """Adds child node for fcoord if it doesn't already exist, and returns it."""
         if fcoord not in self.children:
-            new_position = self.position.play_move(
-                coords.from_flat(fcoord))
+            #new_position = self.position.play_move(
+            #    coords.from_flat(fcoord))
             new_game_state = self.game_state.play_move(
                 coords.to_gtp(coords.from_flat(fcoord)))
-            self.children[fcoord] = MCTSNode(
-                new_position, new_game_state, fmove=fcoord, parent=self)
+            self.children[fcoord] = MCTSNode(new_game_state, fmove=fcoord, parent=self)
         return self.children[fcoord]
 
     def add_virtual_loss(self, up_to):
@@ -215,7 +308,7 @@ class MCTSNode(object):
         self.losses_applied += 1
         # This is a "win" for the current node; hence a loss for its parent node
         # who will be deciding whether to investigate this node again.
-        loss = self.position.to_play
+        loss = self.game_state.to_play
         self.W += loss
         if self.parent is None or self is up_to:
             return
@@ -223,7 +316,7 @@ class MCTSNode(object):
 
     def revert_virtual_loss(self, up_to):
         self.losses_applied -= 1
-        revert = -1 * self.position.to_play
+        revert = -1 * self.game_state.to_play
         self.W += revert
         if self.parent is None or self is up_to:
             return
@@ -233,7 +326,7 @@ class MCTSNode(object):
         assert move_probabilities.shape == (go.N * go.N + 1,)
         # A finished game should not be going through this code path - should
         # directly call backup_value() on the result of the game.
-        assert not self.position.is_game_over()
+        assert not self.game_state.is_game_over()
 
         # If a node was picked multiple times (despite vlosses), we shouldn't
         # expand it more than once.
@@ -276,7 +369,7 @@ class MCTSNode(object):
     def is_done(self):
         """True if the last two moves were Pass or if the position is at a move
         greater than the max depth."""
-        return self.position.is_game_over() or self.position.n >= FLAGS.max_game_length
+        return self.game_state.is_game_over() or self.game_state.n >= FLAGS.max_game_length
 
     def inject_noise(self):
         epsilon = 1e-5

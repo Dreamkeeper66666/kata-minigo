@@ -18,15 +18,16 @@ import json
 import time
 import sgf_wrapper
 import go
+import kata_board
 import coords
 from utils import dbg
 
 
 def translate_gtp_color(gtp_color):
     if gtp_color.lower() in ["b", "black"]:
-        return go.BLACK
+        return Board.BLACK
     if gtp_color.lower() in ["w", "white"]:
-        return go.WHITE
+        return Board.WHITE
     raise ValueError("invalid color {}".format(gtp_color))
 
 
@@ -44,9 +45,9 @@ class BasicCmdHandler(object):
             raise ValueError("unsupported board size: {}".format(n))
 
     def cmd_clear_board(self):
-        position = self._player.get_position()
+        game_state = self._player.get_game_state()
         if (self._player.get_result_string() and
-                position and len(position.recent) > 1):
+                game_state and len(game_state.recent) > 1):
             try:
                 sgf = self._player.to_sgf()
                 with open(datetime.now().strftime("%Y-%m-%d-%H:%M.sgf"), 'w') as f:
@@ -59,7 +60,7 @@ class BasicCmdHandler(object):
 
     def cmd_komi(self, komi: float):
         self._komi = komi
-        self._player.get_position().komi = komi
+        self._player.get_game_state().komi = komi
 
     def cmd_play(self, arg0: str, arg1=None):
         if arg1 is None:
@@ -77,19 +78,19 @@ class BasicCmdHandler(object):
         if self._courtesy_pass:
             # If courtesy pass is True and the previous move was a pass, we'll
             # pass too, regardless of score or our opinion on the game.
-            position = self._player.get_position()
-            if position.recent and position.recent[-1].move is None:
+            game_state = self._player.get_game_state()
+            if get_game_state.moves and get_game_state.moves[-1]==Board.PASS_LOC:
                 return "pass"
 
-        move = self._player.suggest_move(self._player.get_position())
+        move = self._player.suggest_move(self._player.get_game_state())
         if self._player.should_resign():
-            self._player.set_result(-1 * self._player.get_position().to_play,
+            self._player.set_result(-1 * self._player.get_game_state().to_play,
                                     was_resign=True)
             return "resign"
 
         self._player.play_move(move)
         if self._player.get_root().is_done():
-            self._player.set_result(self._player.get_position().result(),
+            self._player.set_result(self._player.get_game_state().result(),
                                     was_resign=False)
         return coords.to_gtp(move)
 
@@ -97,16 +98,16 @@ class BasicCmdHandler(object):
         raise NotImplementedError()
 
     def cmd_showboard(self):
-        dbg('\n\n' + str(self._player.get_position()) + '\n\n')
+        dbg('\n\n' + str(self._player.get_game_state()) + '\n\n')
         return True
 
     def cmd_final_score(self):
         return self._player.get_result_string()
 
     def _accomodate_out_of_turn(self, color: str):
-        position = self._player.get_position()
-        if translate_gtp_color(color) != position.to_play:
-            position.flip_playerturn(mutate=True)
+        game_state = self._player.get_game_state()
+        if translate_gtp_color(color) != game_state.to_play:
+            game_state.flip_playerturn(mutate=True)
 
 
 class KgsCmdHandler(object):
@@ -247,7 +248,7 @@ class MiniguiBasicCmdHandler(BasicCmdHandler):
         root = self._player.get_root()
         if root.is_done():
             self._player.set_result(
-                root.position.result(), was_resign=False)
+                root.game_state.result(), was_resign=False)
 
         self._minigui_report_position()
 
@@ -259,7 +260,7 @@ class MiniguiBasicCmdHandler(BasicCmdHandler):
         root = self._player.get_root()
         if result != "resign":
             dbg("")
-            dbg(root.position.__str__(colors=False))
+            dbg(root.game_state.__str__(colors=False))
             dbg("%d readouts, %.3f s/100. (%.2f sec)" % (
                 self._player.get_num_readouts(),
                 duration / self._player.get_num_readouts() * 100.0, duration))

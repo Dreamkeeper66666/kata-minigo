@@ -103,8 +103,8 @@ class MCTSPlayer(MCTSPlayerInterface):
                 0) or self.num_readouts > 0
         super().__init__()
 
-    def get_position(self):
-        return self.root.position if self.root else None
+    #def get_position(self):
+    #    return self.root.position if self.root else None
 
     def get_game_state(self):
         return self.root.game_state if self.root else None
@@ -115,19 +115,19 @@ class MCTSPlayer(MCTSPlayerInterface):
     def get_result_string(self):
         return self.result_string
 
-    def initialize_game(self, position=None, game_state=None):
-        if position is None:
-            position = go.Position()
+    def initialize_game(self, game_state=None):
+    #    if position is None:
+    #        position = go.Position()
         if game_state is None:
             game_state = kata_mcts.GameState(board_size=19, to_play=1)
 
-        self.root = kata_mcts.MCTSNode(position, game_state)
+        self.root = kata_mcts.MCTSNode(game_state)
         self.result = 0
         self.result_string = None
         self.comments = []
         self.searches_pi = []
 
-    def suggest_move(self, position):
+    def suggest_move(self, game_state):
         """Used for playing a single game.
 
         For parallel play, use initialize_move, select_leaf,
@@ -144,14 +144,14 @@ class MCTSPlayer(MCTSPlayerInterface):
                 self.tree_search()
             if self.verbosity > 0:
                 dbg("%d: Searched %d times in %.2f seconds\n\n" % (
-                    position.n, self.num_readouts, time.time() - start))
+                    game_state.n, self.num_readouts, time.time() - start))
 
         # print some stats on moves considered.
         if self.verbosity > 2:
             dbg(self.root.describe())
             dbg('\n\n')
         if self.verbosity > 3:
-            dbg(self.root.position)
+            dbg(self.root.game_state)
 
         return self.pick_move()
 
@@ -164,7 +164,7 @@ class MCTSPlayer(MCTSPlayerInterface):
         """
         if not self.two_player_mode:
             self.searches_pi.append(self.root.children_as_pi(
-                self.root.position.n < self.temp_threshold))
+                self.root.game_state.n < self.temp_threshold))
         self.comments.append(self.root.describe())
         try:
             self.root = self.root.maybe_add_child(coords.to_flat(c))
@@ -175,7 +175,7 @@ class MCTSPlayer(MCTSPlayerInterface):
             self.comments.pop()
             raise
 
-        self.position = self.root.position  # for showboard
+        #self.position = self.root.position  # for showboard
         self.game_state = self.root.game_state  # for showboard
         del self.root.parent.children
         return True  # GTP requires positive result.
@@ -185,7 +185,7 @@ class MCTSPlayer(MCTSPlayerInterface):
 
         Highest N is most robust indicator. In the early stage of the game, pick
         a move weighted by visit count; later on, pick the absolute max."""
-        if self.root.position.n >= self.temp_threshold:
+        if self.root.game_state.n >= self.temp_threshold:
             fcoord = self.root.best_child()
         else:
             cdf = self.root.children_as_pi(squash=True).cumsum()
@@ -207,7 +207,7 @@ class MCTSPlayer(MCTSPlayerInterface):
                 dbg(self.show_path_to_root(leaf))
             # if game is over, override the value estimate with the true score
             if leaf.is_done():
-                value = 1 if leaf.position.score() > 0 else -1
+                value = 1 if leaf.game_state.score() > 0 else -1
                 leaf.backup_value(value, up_to=self.root)
                 continue
             leaf.add_virtual_loss(up_to=self.root)
@@ -221,8 +221,8 @@ class MCTSPlayer(MCTSPlayerInterface):
         return leaves
 
     def show_path_to_root(self, node):
-        pos = node.position
-        diff = node.position.n - self.root.position.n
+        pos = node.game_state
+        diff = node.game_state.n - self.root.game_state.n
         if len(pos.recent) == 0:
             return
 
@@ -231,10 +231,10 @@ class MCTSPlayer(MCTSPlayerInterface):
                                   coords.to_gtp(move.move))
 
         path = " ".join(fmt(move) for move in pos.recent[-diff:])
-        if node.position.n >= FLAGS.max_game_length:
-            path += " (depth cutoff reached) %0.1f" % node.position.score()
-        elif node.position.is_game_over():
-            path += " (game over) %0.1f" % node.position.score()
+        if node.game_state.n >= FLAGS.max_game_length:
+            path += " (depth cutoff reached) %0.1f" % node.game_state.score()
+        elif node.game_state.is_game_over():
+            path += " (game over) %0.1f" % node.game_state.score()
         return path
 
     def is_done(self):
@@ -249,12 +249,12 @@ class MCTSPlayer(MCTSPlayerInterface):
         if was_resign:
             string = "B+R" if winner == go.BLACK else "W+R"
         else:
-            string = self.root.position.result_string()
+            string = self.root.game_state.result_string()
         self.result_string = string
 
     def to_sgf(self, use_comments=True):
         assert self.result_string is not None
-        pos = self.root.position
+        pos = self.root.game_state
         if use_comments:
             comments = self.comments or ['No comments.']
             comments[0] = ("Resign Threshold: %0.3f\n" %
@@ -269,11 +269,11 @@ class MCTSPlayer(MCTSPlayerInterface):
                                     comments=comments)
 
     def extract_data(self):
-        assert len(self.searches_pi) == self.root.position.n
+        assert len(self.searches_pi) == self.root.game_state.n
         assert self.result != 0
-        for pwc, pi in zip(go.replay_position(self.root.position, self.result),
+        for pwc, pi in zip(replay_position(self.root.game_state, self.result),
                            self.searches_pi):
-            yield pwc.position, pi, pwc.result
+            yield pwc.game_state, pi, pwc.result
 
     def get_num_readouts(self):
         return self.num_readouts
@@ -283,6 +283,6 @@ class MCTSPlayer(MCTSPlayerInterface):
 
 
 class CGOSPlayer(MCTSPlayer):
-    def suggest_move(self, position):
-        self.seconds_per_move = time_recommendation(position.n)
-        return super().suggest_move(position)
+    def suggest_move(self, game_state):
+        self.seconds_per_move = time_recommendation(game_state.n)
+        return super().suggest_move(game_state)
