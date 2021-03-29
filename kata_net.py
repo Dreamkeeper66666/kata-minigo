@@ -1292,11 +1292,11 @@ class Model:
     policy = policys
     value = np.zeros(shape=[batch_size], dtype=np.float32)
 
-    #for i in range(batch_size):
-    #  if game_states[i].board.pla == Board.BLACK:
-    value[i] = values[i][0] - values[i][1]
-    #  else:
-    #value[i] = values[i][1] - values[i][0]
+    for i in range(batch_size):
+      if game_states[i].board.pla == Board.BLACK:
+        value[i] = values[i][0] - values[i][1]
+      else:
+        value[i] = values[i][1] - values[i][0]
     return policy, value
 
 
