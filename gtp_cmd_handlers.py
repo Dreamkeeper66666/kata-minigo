@@ -57,7 +57,7 @@ class BasicCmdHandler(object):
                 pass
             except:
                 dbg("Error saving sgf")
-        self._player.initialize_game(go.Position(komi=self._komi))
+        self._player.initialize_game(kata_mcts.GameState(board_size=19, to_play=1))
 
     def cmd_komi(self, komi: float):
         self._komi = komi
@@ -124,7 +124,7 @@ class KgsCmdHandler(object):
 
         root = self._player.get_root()
         default_response = "Supported commands are 'winrate', 'nextplay', 'fortune', and 'help'."
-        if root is None or root.position.n == 0:
+        if root is None or root.game_state.n == 0:
             return "I'm not playing right now.  " + default_response
 
         if 'winrate' in text.lower():
@@ -196,7 +196,7 @@ class GoGuiCmdHandler(object):
             moves = self.cmd_nextplay().lower()
             moves = moves.split()
             root = self._player.get_root()
-            colors = "bw" if root.position.to_play is go.BLACK else "wb"
+            colors = "bw" if root.game_state.to_play is go.BLACK else "wb"
             moves_cols = " ".join(['{} {}'.format(*z)
                                    for z in zip(itertools.cycle(colors), moves)])
             dbg("gogui-gfx: TEXT", "{:.3f} after {}".format(root.Q, root.N))
@@ -242,7 +242,7 @@ class MiniguiBasicCmdHandler(BasicCmdHandler):
 
     def cmd_clear_board(self):
         super().cmd_clear_board()
-        self._minigui_report_position()
+        self._minigui_report_game_state()
 
     def cmd_play(self, arg0: str, arg1=None):
         super().cmd_play(arg0, arg1)
@@ -251,7 +251,7 @@ class MiniguiBasicCmdHandler(BasicCmdHandler):
             self._player.set_result(
                 root.game_state.result(), was_resign=False)
 
-        self._minigui_report_position()
+        self._minigui_report_game_state()
 
     def cmd_genmove(self, color=None):
         start = time.time()
@@ -268,9 +268,9 @@ class MiniguiBasicCmdHandler(BasicCmdHandler):
             dbg("")
             if root.is_done():
                 self._player.set_result(
-                    root.position.result(), was_resign=False)
+                    root.game_state.result(), was_resign=False)
 
-        self._minigui_report_position()
+        self._minigui_report_game_state()
 
         return result
 
@@ -284,14 +284,14 @@ class MiniguiBasicCmdHandler(BasicCmdHandler):
                 self._last_report_time = now
         return leaves
 
-    def _minigui_report_position(self):
+    def _minigui_report_game_state(self):
         root = self._player.get_root()
-        position = root.position
+        game_state = root.game_state
 
         board = []
         for row in range(go.N):
             for col in range(go.N):
-                stone = position.board[row, col]
+                stone = game_state.board[row, col]
                 if stone == go.BLACK:
                     board.append("X")
                 elif stone == go.WHITE:
@@ -301,18 +301,18 @@ class MiniguiBasicCmdHandler(BasicCmdHandler):
 
         msg = {
             "id": hex(id(root)),
-            "toPlay": "B" if position.to_play == 1 else "W",
-            "moveNum": position.n,
+            "toPlay": "B" if game_state.to_play == 1 else "W",
+            "moveNum": game_state.n,
             "stones": "".join(board),
-            "gameOver": position.is_game_over(),
-            "caps": position.caps,
+            "gameOver": game_state.is_game_over(),
+            "caps": game_state.caps,
         }
         if root.parent and root.parent.parent:
             msg["parentId"] = hex(id(root.parent))
             msg["q"] = float(root.parent.Q)
-        if position.recent:
-            msg["move"] = coords.to_gtp(position.recent[-1].move)
-        dbg("mg-position:%s" % json.dumps(msg, sort_keys=True))
+        if game_state.recent:
+            msg["move"] = coords.to_gtp(game_state.recent[-1].move)
+        dbg("mg-game_state:%s" % json.dumps(msg, sort_keys=True))
 
     def _minigui_report_search_status(self, leaves):
         """Prints the current MCTS search status to stderr.
