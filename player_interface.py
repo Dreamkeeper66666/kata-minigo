@@ -21,7 +21,7 @@ class PlayerInterface(ABC):
     """Interface for a basic Go player."""
 
     @abstractmethod
-    def get_position(self):
+    def get_game_state(self):
         """Get the current position.
 
         Returns:
