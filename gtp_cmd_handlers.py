@@ -19,6 +19,7 @@ import time
 import sgf_wrapper
 import go
 import kata_board
+import kata_mcts
 import coords
 from kata_board import Board
 from utils import dbg
