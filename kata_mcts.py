@@ -119,7 +119,7 @@ class GameState:
 
     return new_game_state
 
-  def socre(self):
+  def score(self):
     board = self.board
     pla = board.pla
     opp = Board.get_opp(pla)
