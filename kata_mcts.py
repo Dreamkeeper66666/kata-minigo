@@ -149,27 +149,13 @@ class GameState:
     # by default, every move is legal
     legal_moves = np.zeros([go.N, go.N], dtype=np.int8)
     # ...unless there is already a stone there
-    legal_moves[self.board != EMPTY] = 0
-    # calculate which spots have 4 stones next to them
-    # padding is because the edge always counts as a lost liberty.
-    adjacent = np.ones([N + 2, N + 2], dtype=np.int8)
-    adjacent[1:-1, 1:-1] = np.abs(self.board)
-    num_adjacent_stones = (adjacent[:-2, 1:-1] + adjacent[1:-1, :-2] +
-                           adjacent[2:, 1:-1] + adjacent[1:-1, 2:])
-    # Surrounded spots are those that are empty and have 4 adjacent stones.
-    surrounded_spots = np.multiply(
-        (self.board == EMPTY),
-        (num_adjacent_stones == 4))
-    # Such spots are possibly illegal, unless they are capturing something.
-    # Iterate over and manually check each spot.
-    for coord in np.transpose(np.nonzero(surrounded_spots)):
-        if self.is_move_suicidal(tuple(coord)):
-            legal_moves[tuple(coord)] = 0
+    #legal_moves[self.board.board[loc] != Board.EMPTY] = 0
 
-    # ...and retaking ko is always illegal
-    if self.ko is not None:
-        legal_moves[self.ko] = 0
-
+    for i in range(N):
+      for j in range(N):
+        loc = self.board.loc(i,j)
+        if self.board.would_be_legal(self.board.pla,loc):
+          legal_moves[i][j] = 1
     # and pass is always legal
     return np.concatenate([legal_moves.ravel(), [1]])     
 
@@ -385,7 +371,7 @@ class MCTSNode(object):
         slightly larger than unity to encourage diversity in early play and
         hopefully to move away from 3-3s
         """
-        probs = self.child_N
+        probs = self.child_
         if squash:
             probs = probs ** .98
         sum_probs = np.sum(probs)
