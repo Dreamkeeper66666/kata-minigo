@@ -151,8 +151,8 @@ class GameState:
     # ...unless there is already a stone there
     #legal_moves[self.board.board[loc] != Board.EMPTY] = 0
 
-    for i in range(N):
-      for j in range(N):
+    for i in range(go.N):
+      for j in range(go.N):
         loc = self.board.loc(i,j)
         if self.board.would_be_legal(self.board.pla,loc):
           legal_moves[i][j] = 1
