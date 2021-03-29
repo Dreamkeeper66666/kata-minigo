@@ -147,7 +147,7 @@ class GameState:
   def all_legal_moves(self):
     'Returns a np.array of size go.N**2 + 1, with 1 = legal, 0 = illegal'
     # by default, every move is legal
-    legal_moves = np.zeros([N, N], dtype=np.int8)
+    legal_moves = np.zeros([go.N, go.N], dtype=np.int8)
     # ...unless there is already a stone there
     legal_moves[self.board != EMPTY] = 0
     # calculate which spots have 4 stones next to them
