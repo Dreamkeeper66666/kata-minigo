@@ -18,18 +18,15 @@ import json
 import time
 import sgf_wrapper
 import go
-import kata_board
-import kata_mcts
 import coords
-from kata_board import Board
 from utils import dbg
 
 
 def translate_gtp_color(gtp_color):
     if gtp_color.lower() in ["b", "black"]:
-        return Board.BLACK
+        return go.BLACK
     if gtp_color.lower() in ["w", "white"]:
-        return Board.WHITE
+        return go.WHITE
     raise ValueError("invalid color {}".format(gtp_color))
 
 
@@ -47,9 +44,9 @@ class BasicCmdHandler(object):
             raise ValueError("unsupported board size: {}".format(n))
 
     def cmd_clear_board(self):
-        game_state = self._player.get_game_state()
+        position = self._player.get_position()
         if (self._player.get_result_string() and
-                game_state and len(game_state.recent) > 1):
+                position and len(position.recent) > 1):
             try:
                 sgf = self._player.to_sgf()
                 with open(datetime.now().strftime("%Y-%m-%d-%H:%M.sgf"), 'w') as f:
@@ -58,11 +55,11 @@ class BasicCmdHandler(object):
                 pass
             except:
                 dbg("Error saving sgf")
-        self._player.initialize_game(kata_mcts.GameState(board_size=19, to_play=1))
+        self._player.initialize_game(go.Position(komi=self._komi))
 
     def cmd_komi(self, komi: float):
         self._komi = komi
-        self._player.get_game_state().komi = komi
+        self._player.get_position().komi = komi
 
     def cmd_play(self, arg0: str, arg1=None):
         if arg1 is None:
@@ -80,19 +77,19 @@ class BasicCmdHandler(object):
         if self._courtesy_pass:
             # If courtesy pass is True and the previous move was a pass, we'll
             # pass too, regardless of score or our opinion on the game.
-            game_state = self._player.get_game_state()
-            if get_game_state.moves and get_game_state.moves[-1]==Board.PASS_LOC:
+            position = self._player.get_position()
+            if position.recent and position.recent[-1].move is None:
                 return "pass"
 
-        move = self._player.suggest_move(self._player.get_game_state())
+        move = self._player.suggest_move(self._player.get_position())
         if self._player.should_resign():
-            self._player.set_result(-1 * self._player.get_game_state().to_play,
+            self._player.set_result(-1 * self._player.get_position().to_play,
                                     was_resign=True)
             return "resign"
 
         self._player.play_move(move)
         if self._player.get_root().is_done():
-            self._player.set_result(self._player.get_game_state().result(),
+            self._player.set_result(self._player.get_position().result(),
                                     was_resign=False)
         return coords.to_gtp(move)
 
@@ -100,16 +97,16 @@ class BasicCmdHandler(object):
         raise NotImplementedError()
 
     def cmd_showboard(self):
-        dbg('\n\n' + str(self._player.get_game_state()) + '\n\n')
+        dbg('\n\n' + str(self._player.get_position()) + '\n\n')
         return True
 
     def cmd_final_score(self):
         return self._player.get_result_string()
 
     def _accomodate_out_of_turn(self, color: str):
-        game_state = self._player.get_game_state()
-        if translate_gtp_color(color) != game_state.to_play:
-            game_state.flip_playerturn(mutate=True)
+        position = self._player.get_position()
+        if translate_gtp_color(color) != position.to_play:
+            position.flip_playerturn(mutate=True)
 
 
 class KgsCmdHandler(object):
@@ -125,7 +122,7 @@ class KgsCmdHandler(object):
 
         root = self._player.get_root()
         default_response = "Supported commands are 'winrate', 'nextplay', 'fortune', and 'help'."
-        if root is None or root.game_state.n == 0:
+        if root is None or root.position.n == 0:
             return "I'm not playing right now.  " + default_response
 
         if 'winrate' in text.lower():
@@ -197,7 +194,7 @@ class GoGuiCmdHandler(object):
             moves = self.cmd_nextplay().lower()
             moves = moves.split()
             root = self._player.get_root()
-            colors = "bw" if root.game_state.to_play is go.BLACK else "wb"
+            colors = "bw" if root.position.to_play is go.BLACK else "wb"
             moves_cols = " ".join(['{} {}'.format(*z)
                                    for z in zip(itertools.cycle(colors), moves)])
             dbg("gogui-gfx: TEXT", "{:.3f} after {}".format(root.Q, root.N))
@@ -243,16 +240,16 @@ class MiniguiBasicCmdHandler(BasicCmdHandler):
 
     def cmd_clear_board(self):
         super().cmd_clear_board()
-        self._minigui_report_game_state()
+        self._minigui_report_position()
 
     def cmd_play(self, arg0: str, arg1=None):
         super().cmd_play(arg0, arg1)
         root = self._player.get_root()
         if root.is_done():
             self._player.set_result(
-                root.game_state.result(), was_resign=False)
+                root.position.result(), was_resign=False)
 
-        self._minigui_report_game_state()
+        self._minigui_report_position()
 
     def cmd_genmove(self, color=None):
         start = time.time()
@@ -262,16 +259,16 @@ class MiniguiBasicCmdHandler(BasicCmdHandler):
         root = self._player.get_root()
         if result != "resign":
             dbg("")
-            dbg(root.game_state.__str__(colors=False))
+            dbg(root.position.__str__(colors=False))
             dbg("%d readouts, %.3f s/100. (%.2f sec)" % (
                 self._player.get_num_readouts(),
                 duration / self._player.get_num_readouts() * 100.0, duration))
             dbg("")
             if root.is_done():
                 self._player.set_result(
-                    root.game_state.result(), was_resign=False)
+                    root.position.result(), was_resign=False)
 
-        self._minigui_report_game_state()
+        self._minigui_report_position()
 
         return result
 
@@ -285,14 +282,14 @@ class MiniguiBasicCmdHandler(BasicCmdHandler):
                 self._last_report_time = now
         return leaves
 
-    def _minigui_report_game_state(self):
+    def _minigui_report_position(self):
         root = self._player.get_root()
-        game_state = root.game_state
+        position = root.position
 
         board = []
         for row in range(go.N):
             for col in range(go.N):
-                stone = game_state.board[row, col]
+                stone = position.board[row, col]
                 if stone == go.BLACK:
                     board.append("X")
                 elif stone == go.WHITE:
@@ -302,18 +299,18 @@ class MiniguiBasicCmdHandler(BasicCmdHandler):
 
         msg = {
             "id": hex(id(root)),
-            "toPlay": "B" if game_state.to_play == 1 else "W",
-            "moveNum": game_state.n,
+            "toPlay": "B" if position.to_play == 1 else "W",
+            "moveNum": position.n,
             "stones": "".join(board),
-            "gameOver": game_state.is_game_over(),
-            "caps": game_state.caps,
+            "gameOver": position.is_game_over(),
+            "caps": position.caps,
         }
         if root.parent and root.parent.parent:
             msg["parentId"] = hex(id(root.parent))
             msg["q"] = float(root.parent.Q)
-        if game_state.recent:
-            msg["move"] = coords.to_gtp(game_state.recent[-1].move)
-        dbg("mg-game_state:%s" % json.dumps(msg, sort_keys=True))
+        if position.recent:
+            msg["move"] = coords.to_gtp(position.recent[-1].move)
+        dbg("mg-position:%s" % json.dumps(msg, sort_keys=True))
 
     def _minigui_report_search_status(self, leaves):
         """Prints the current MCTS search status to stderr.
