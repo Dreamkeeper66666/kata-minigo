@@ -33,7 +33,7 @@ import paddle
 import features as features_lib
 import go
 import symmetries
-import minigo_model
+from minigo_model import *
 paddle.disable_static()
 
 
