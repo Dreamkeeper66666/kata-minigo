@@ -29,11 +29,11 @@ import time
 import numpy as np
 import random
 import paddle
-
+from mini_paddel import *
 import features as features_lib
 import go
 import symmetries
-from minigo_model import *
+import minigo_model 
 paddle.disable_static()
 
 
