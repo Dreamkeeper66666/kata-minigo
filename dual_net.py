@@ -175,7 +175,7 @@ class DualNetwork():
         self.save_file = save_file
         params = paddle.load(save_file)
         self.pd_model = TFModel()
-        self.pd_model.set_dict(params, use_structured_name=False)
+        self.pd_model.set_dict(params, use_structured_name=True)
         self.pd_model.eval()
 
     def run(self, position):
@@ -188,7 +188,9 @@ class DualNetwork():
         if FLAGS.use_random_symmetry:
             syms_used, processed = symmetries.randomize_symmetries_feat(
                 processed)
-        probabilities,value = self.pd_model(processed)
+        probabilities_tensor,value_tensor = self.pd_model(np.array(processed).astype(np.float32))
+        probabilities,value = probabilities_tensor.numpy(),value_tensor.numpy()
+
         if FLAGS.use_random_symmetry:
             probabilities = symmetries.invert_symmetries_pi(
                 syms_used, probabilities)
