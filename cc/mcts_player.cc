@@ -116,12 +116,12 @@ Coord MctsPlayer::SuggestMove(int new_readouts, bool inject_noise) {
                              options_.time_limit, options_.decay_factor);
     }
     while (absl::Now() - start < absl::Seconds(seconds_per_move)) {
-      TreeSearch(options_.virtual_losses, target_readouts);
+      TreeSearch(options_.virtual_losses, target_readouts, stop_tree_search_);
     }
   } else {
     // Use a fixed number of reads.
     while (root->N() < target_readouts) {
-      TreeSearch(options_.virtual_losses, target_readouts);
+      TreeSearch(options_.virtual_losses, target_readouts, stop_tree_search_);
     }
   }
   if (ShouldResign()) {
@@ -131,7 +131,12 @@ Coord MctsPlayer::SuggestMove(int new_readouts, bool inject_noise) {
   return tree_->PickMove(&rnd_, true);
 }
 
-void MctsPlayer::TreeSearch(int num_leaves, int max_num_reads) {
+void MctsPlayer::TreeSearch(int num_leaves, int max_num_reads, bool stop_tree_search_) {
+
+  if (stop_tree_search_){
+    return;
+  } 
+
   MaybeExpandRoot();
   SelectLeaves(num_leaves, max_num_reads);
   ProcessLeaves();
@@ -272,7 +277,9 @@ bool MctsPlayer::ShouldResign() const {
 }
 
 void MctsPlayer::SetTreeSearchCallback(TreeSearchCallback cb) {
-  tree_search_cb_ = std::move(cb);
+  if (!stop_tree_search_){
+    tree_search_cb_ = std::move(cb);
+  }
 }
 
 std::string MctsPlayer::GetModelsUsedForInference() const {

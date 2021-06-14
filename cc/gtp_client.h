@@ -195,6 +195,7 @@ class GtpClient {
   absl::Duration ponder_duration_ = {};
   absl::Time ponder_time_limit_ = absl::InfinitePast();
   bool ponder_limit_reached_ = false;
+  bool stop_analysis_ = true;
 
   Options options_;
 

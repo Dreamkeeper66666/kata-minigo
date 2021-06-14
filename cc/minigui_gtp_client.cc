@@ -63,6 +63,7 @@ MiniguiGtpClient::MiniguiGtpClient(
                 player_options, client_options) {
   RegisterCmd("echo", &MiniguiGtpClient::HandleEcho);
   RegisterCmd("genmove", &MiniguiGtpClient::HandleGenmove);
+  RegisterCmd("lz-analyze", &MiniguiGtpClient::HandleAnalyze);
   RegisterCmd("play", &MiniguiGtpClient::HandlePlay);
   RegisterCmd("report_search_interval",
               &MiniguiGtpClient::HandleReportSearchInterval);
@@ -93,7 +94,7 @@ void MiniguiGtpClient::NewGame() {
 }
 
 void MiniguiGtpClient::Ponder() {
-  if (win_rate_evaluator_->all_nodes_have_at_least_one_read()) {
+  if (win_rate_evaluator_->all_nodes_have_at_least_one_read() && !player_->stop_tree_search_) {
     GtpClient::Ponder();
   }
   win_rate_evaluator_->EvalNodes();
@@ -107,9 +108,10 @@ GtpClient::Response MiniguiGtpClient::HandleCmd(const std::string& line) {
   // stderr and stdout synchronized so that all data written to stderr while
   // processing a GTP command is consumed before the GTP result written to
   // stdout.
-  MG_LOG(INFO) << "__GTP_CMD_DONE__";
+  //MG_LOG(INFO) << "__GTP_CMD_DONE__";
   return response;
 }
+
 
 GtpClient::Response MiniguiGtpClient::HandleEcho(CmdArgs args) {
   return Response::Ok(absl::StrJoin(args, " "));
@@ -117,14 +119,17 @@ GtpClient::Response MiniguiGtpClient::HandleEcho(CmdArgs args) {
 
 GtpClient::Response MiniguiGtpClient::HandleGenmove(CmdArgs args) {
   ReportSearchStatus(nullptr, true);
-  auto response = GtpClient::HandleGenmove(args);
-  if (response.ok) {
-    variation_tree_->PlayMove(player_->root()->move);
-    ReportRootPosition();
-  }
+  //auto response = GtpClient::HandleGenmove(args);
+  //if (response.ok) {
+   // variation_tree_->PlayMove(player_->root()->move);
+    //ReportRootPosition();
+  //}
   RefreshPendingWinRateEvals();
-  return response;
+  return  Response::Ok();
 }
+
+
+
 
 GtpClient::Response MiniguiGtpClient::HandlePlay(CmdArgs args) {
   auto response = GtpClient::HandlePlay(args);
@@ -150,6 +155,29 @@ GtpClient::Response MiniguiGtpClient::HandleReportSearchInterval(CmdArgs args) {
 
   return Response::Ok();
 }
+
+GtpClient::Response MiniguiGtpClient::HandleAnalyze(CmdArgs args) {
+
+  std::cout << "=\n";
+
+  int x;
+  if (!absl::SimpleAtoi(args[0], &x) || x < 0) {
+    return Response::Error("couldn't parse ", args[0], " as an integer >= 0");
+  }
+  report_search_interval_ = absl::Milliseconds(x);
+
+  ReportSearchStatus(nullptr, true);
+
+  auto response = GtpClient::HandleGenmove(args);
+  //if (response.ok) {
+   // variation_tree_->PlayMove(player_->root()->move);
+    //ReportRootPosition();
+  //}
+  RefreshPendingWinRateEvals();
+
+  return response;
+}
+
 
 GtpClient::Response MiniguiGtpClient::HandleSelectPosition(CmdArgs args) {
   auto response = CheckArgsExact(1, args);
@@ -282,80 +310,45 @@ void MiniguiGtpClient::ReportSearchStatus(const MctsNode* leaf,
   auto sorted_child_info = player_->tree().CalculateRankedMoveInfo();
   auto* root = player_->root();
 
-  nlohmann::json j = {
-      {"id", variation_tree_->current_node()->id},
-      {"n", root->N()},
-      {"q", GetBestMoveQ(root)},
-  };
+  std::ostringstream moveinfo;
+
+  Coord c = sorted_child_info[0].c;
+  const auto child_it = root->children.find(c);
+  if (child_it != root->children.end() && root->child_N(c) != 0) {
+    moveinfo << "info";
+  }
+
 
   // TODO(tommadams): Make the number of child variations sent back
   // configurable.
-  nlohmann::json variations;
-  for (int i = 0; i < 10; ++i) {
+
+  
+
+  for (int i = 0; i < 20; ++i) {
     Coord c = sorted_child_info[i].c;
     const auto child_it = root->children.find(c);
     if (child_it == root->children.end() || root->child_N(c) == 0) {
       break;
     }
 
-    nlohmann::json moves = {c.ToGtp()};
+    moveinfo << " move " << c.ToGtp();
+    moveinfo << " visits " << root->child_N(c);
+    moveinfo << " winrate " << ((root->child_Q(c)+1) / 2);
+    moveinfo << " order " << i;
+    moveinfo << " pv ";
+    moveinfo << c.ToGtp();
+
     const auto* node = child_it->second.get();
     for (const auto c : node->GetMostVisitedPath()) {
-      moves.push_back(c.ToGtp());
-    }
-    variations[c.ToGtp()] = {
-        {"n", root->child_N(c)},
-        {"q", root->child_Q(c)},
-        {"moves", std::move(moves)},
-    };
-  }
-  if (!variations.empty()) {
-    j["variations"] = std::move(variations);
-  }
-
-  // Current live search variation.
-  if (leaf != nullptr) {
-    std::vector<const MctsNode*> live;
-    for (const auto* node = leaf; node != root; node = node->parent) {
-      live.push_back(node);
-    }
-    if (!live.empty()) {
-      std::reverse(live.begin(), live.end());
-      nlohmann::json moves;
-      for (const auto* node : live) {
-        moves.push_back(node->move.ToGtp());
+       moveinfo << " ";
+       moveinfo << c.ToGtp();
       }
-      j["variations"]["live"] = {
-          {"n", live.front()->N()},
-          {"q", GetBestMoveQ(live.front())},
-          {"moves", std::move(moves)},
-      };
     }
+
+    MG_LOG(INFO) << moveinfo.str();
   }
 
-  // Child N.
-  auto& child_N = j["childN"];
-  for (auto N : root->edges.N) {
-    child_N.push_back(static_cast<int>(N));
-  }
 
-  // Child Q.
-  auto& child_Q = j["childQ"];
-  for (int i = 0; i < kNumMoves; ++i) {
-    child_Q.push_back(static_cast<int>(std::round(root->child_Q(i) * 1000)));
-  }
-
-  if (include_tree_stats) {
-    auto tree_stats = player_->tree().CalculateStats();
-    j["treeStats"] = {
-        {"numNodes", tree_stats.num_nodes},
-        {"numLeafNodes", tree_stats.num_leaf_nodes},
-        {"maxDepth", tree_stats.max_depth},
-    };
-  }
-
-  MG_LOG(INFO) << "mg-update:" << j.dump();
-}
 
 void MiniguiGtpClient::ReportRootPosition() {
   const auto* root = player_->root();
@@ -424,7 +417,8 @@ void MiniguiGtpClient::RefreshPendingWinRateEvals() {
 }
 
 void MiniguiGtpClient::TreeSearchCb(
-    const std::vector<const MctsNode*>& leaves) {
+  const std::vector<const MctsNode*>& leaves) {
+  
   if (!leaves.empty() && report_search_interval_ != absl::ZeroDuration()) {
     auto now = absl::Now();
     if (now - last_report_time_ > report_search_interval_) {
@@ -611,7 +605,7 @@ void MiniguiGtpClient::WinRateEvaluator::Worker::Run() {
     for (auto c : node->GetVariation()) {
       MG_CHECK(player_->PlayMove(c));
     }
-    player_->TreeSearch(player_->options().virtual_losses, 1024);
+    player_->TreeSearch(player_->options().virtual_losses, 1024, player_->stop_tree_search_);
     BatchingModelFactory::EndGame(player_->model(), player_->model());
 
     nlohmann::json j = {

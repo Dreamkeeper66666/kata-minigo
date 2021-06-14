@@ -199,6 +199,7 @@ class MiniguiGtpClient : public GtpClient {
   // GTP command handlers.
   Response HandleCmd(const std::string& line) override;
   Response HandleGenmove(CmdArgs args) override;
+  Response HandleAnalyze(CmdArgs args);
   Response HandlePlay(CmdArgs args) override;
   Response ReplaySgf(const sgf::Collection& collection) override;
 

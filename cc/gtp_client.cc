@@ -20,6 +20,7 @@
 #include <limits>
 #include <thread>
 #include <utility>
+#include <future>
 
 #include "absl/strings/numbers.h"
 #include "absl/strings/str_join.h"
@@ -89,51 +90,27 @@ void GtpClient::Run() {
   // Start a background thread that pushes lines read from stdin into the
   // thread safe stdin_queue_. This allows us to ponder when there's nothing
   // to read from stdin.
-  std::atomic<bool> running(true);
-  std::thread stdin_thread([this, &running]() {
-    std::string line;
-    while (std::cin) {
-      std::getline(std::cin, line);
-      stdin_queue_.Push(line);
-    }
-    running = false;
-  });
 
   // Don't wait for the stdin reading thread to exit because there's no way to
   // abort the blocking call std::getline read (apart from the user hitting
   // ctrl-C). The OS will clean the thread up when the process exits.
-  stdin_thread.detach();
 
   NewGame();
 
-  while (running) {
+  while (true) {
     std::string line;
 
     // If there's a command waiting on stdin, process it.
-    if (stdin_queue_.TryPop(&line)) {
+    if (std::cin) {
+      std::getline(std::cin, line);
       auto response = HandleCmd(line);
       std::cout << response << std::flush;
       if (response.done) {
         break;
       }
-      continue;
     }
-
     // Otherwise, ponder if enabled.
-    if (!MaybePonder()) {
-      // If pondering isn't enabled, try and pop a command from stdin with a
-      // short timeout. The timeout gives us a chance to break out of the loop
-      // when stdin is closed with ctrl-C.
-      if (stdin_queue_.PopWithTimeout(&line, absl::Seconds(1))) {
-        auto response = HandleCmd(line);
-        std::cout << response << std::flush;
-        if (response.done) {
-          break;
-        }
-      }
-    }
   }
-  running = false;
 }
 
 void GtpClient::NewGame() {
@@ -179,7 +156,7 @@ void GtpClient::Ponder() {
   int n = player_->root()->N();
 
   player_->TreeSearch(player_->options().virtual_losses,
-                      std::numeric_limits<int>::max());
+                      std::numeric_limits<int>::max(), player_->stop_tree_search_);
 
   // Increment the ponder count by difference new and old reads.
   ponder_read_count_ += player_->root()->N() - n;
@@ -217,8 +194,18 @@ GtpClient::Response GtpClient::HandleCmd(const std::string& line) {
   Response response;
   if (cmd == "quit") {
     response = Response::Done();
-  } else {
+  } 
+  else if(cmd == "lz-analyze") {
+    player_->stop_tree_search_ = false;
+    auto ret = std::async(std::launch::async, &GtpClient::DispatchCmd, this, cmd, args);
+    response = ret.get();
+    return response;
+    
+  }
+  else{
+    player_->stop_tree_search_ = true;
     response = DispatchCmd(cmd, args);
+    return response;
   }
 
   // Set the command ID on the response if we have one.
@@ -347,7 +334,7 @@ GtpClient::Response GtpClient::HandleGenmove(CmdArgs args) {
     }
     c = player_->SuggestMove(player_->options().num_readouts);
   }
-  MG_LOG(INFO) << player_->tree().Describe();
+  //MG_LOG(INFO) << player_->tree().Describe();
   MG_CHECK(player_->PlayMove(c));
 
   MaybeStartPondering();

@@ -159,7 +159,9 @@ class MctsPlayer {
 
   void SetOptions(const Options& options) { options_ = options; }
 
-  void TreeSearch(int num_leaves, int max_num_reads);
+  void TreeSearch(int num_leaves, int max_num_reads, bool stop_tree_search_);
+
+  bool stop_tree_search_ = false;
 
   // Protected methods that get exposed for testing.
  protected:
