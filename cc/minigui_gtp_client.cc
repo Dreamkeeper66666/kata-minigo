@@ -318,6 +318,9 @@ void MiniguiGtpClient::ReportSearchStatus(const MctsNode* leaf,
   if (child_it != root->children.end() && root->child_N(c) != 0) {
     moveinfo << "info";
   }
+  else{
+    return;
+  }
 
 
   // TODO(tommadams): Make the number of child variations sent back
