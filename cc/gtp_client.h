@@ -99,7 +99,7 @@ class GtpClient {
     }
 
     friend std::ostream& operator<<(std::ostream& os, const Response& r) {
-      os << (r.ok ? "=" : "?");
+      os << r.ok;
       if (r.has_cmd_id) {
         os << r.cmd_id;
       }

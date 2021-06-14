@@ -115,12 +115,12 @@ Coord MctsPlayer::SuggestMove(int new_readouts, bool inject_noise) {
           TimeRecommendation(root->position.n(), seconds_per_move,
                              options_.time_limit, options_.decay_factor);
     }
-    while (absl::Now() - start < absl::Seconds(seconds_per_move)) {
+    while (absl::Now() - start < absl::Seconds(seconds_per_move) && !stop_tree_search_) {
       TreeSearch(options_.virtual_losses, target_readouts, stop_tree_search_);
     }
   } else {
     // Use a fixed number of reads.
-    while (root->N() < target_readouts) {
+    while (root->N() < target_readouts && !stop_tree_search_) {
       TreeSearch(options_.virtual_losses, target_readouts, stop_tree_search_);
     }
   }
@@ -131,12 +131,18 @@ Coord MctsPlayer::SuggestMove(int new_readouts, bool inject_noise) {
   return tree_->PickMove(&rnd_, true);
 }
 
+void MctsPlayer::KeepSearch(int num_leaves, int max_num_reads, bool stop_tree_search_) {
+
+  while (!stop_tree_search_) {
+  TreeSearch(int num_leaves, int max_num_reads, bool stop_tree_search_)
+}
+}
+
 void MctsPlayer::TreeSearch(int num_leaves, int max_num_reads, bool stop_tree_search_) {
 
-  if (stop_tree_search_){
+  if (stop_tree_search_) {
     return;
-  } 
-
+  }
   MaybeExpandRoot();
   SelectLeaves(num_leaves, max_num_reads);
   ProcessLeaves();
@@ -226,6 +232,10 @@ void MctsPlayer::ProcessLeaves() {
     return;
   }
 
+  if (stop_tree_search_) {
+    return;
+  }
+
   input_ptrs_.clear();
   output_ptrs_.clear();
   for (auto& x : tree_search_inferences_) {
@@ -247,6 +257,10 @@ void MctsPlayer::ProcessLeaves() {
 
   // Incorporate the inference outputs back into tree search.
   for (auto& inference : tree_search_inferences_) {
+
+    if (stop_tree_search_) {
+      return;
+    }
     auto& output = inference.output;
 
     // Merge the inference output with those in the inference cache, possibly

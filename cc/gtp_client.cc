@@ -31,6 +31,12 @@
 #include "cc/model/loader.h"
 #include "cc/sgf.h"
 
+#ifdef _WIN32
+#include <Windows.h>
+#else
+#include <unistd.h>
+#endif
+
 namespace minigo {
 
 GtpClient::GtpClient(std::string device,
@@ -63,6 +69,7 @@ GtpClient::GtpClient(std::string device,
   RegisterCmd("list_commands", &GtpClient::HandleListCommands);
   RegisterCmd("loadsgf", &GtpClient::HandleLoadsgf);
   RegisterCmd("name", &GtpClient::HandleName);
+  RegisterCmd("version", &GtpClient::HandleVersion);
   RegisterCmd("play", &GtpClient::HandlePlay);
   RegisterCmd("ponder", &GtpClient::HandlePonder);
   RegisterCmd("readouts", &GtpClient::HandleReadouts);
@@ -87,32 +94,53 @@ void GtpClient::Run() {
   player_->model()->RunMany(inputs, &outputs, nullptr);
   MG_LOG(INFO) << "GTP engine ready";
 
-  // Start a background thread that pushes lines read from stdin into the
-  // thread safe stdin_queue_. This allows us to ponder when there's nothing
-  // to read from stdin.
+  std::atomic<bool> running(true);
+  std::thread stdin_thread([this, &running]() {
+    std::string line;
+    while (std::cin) {
+      std::getline(std::cin, line);
+      stdin_queue_.Push(line);
+    }
+    running = false;
+  });
 
   // Don't wait for the stdin reading thread to exit because there's no way to
   // abort the blocking call std::getline read (apart from the user hitting
   // ctrl-C). The OS will clean the thread up when the process exits.
+  stdin_thread.detach();
 
   NewGame();
 
-  while (true) {
+  while (running) {
     std::string line;
 
     // If there's a command waiting on stdin, process it.
-    if (std::cin) {
-      std::getline(std::cin, line);
+    if (stdin_queue_.TryPop(&line)) {
       auto response = HandleCmd(line);
       std::cout << response << std::flush;
       if (response.done) {
         break;
       }
+      continue;
     }
-    // Otherwise, ponder if enabled.
-  }
-}
 
+    // Otherwise, ponder if enabled.
+    if (!MaybePonder()) {
+      // If pondering isn't enabled, try and pop a command from stdin with a
+      // short timeout. The timeout gives us a chance to break out of the loop
+      // when stdin is closed with ctrl-C.
+      if (stdin_queue_.PopWithTimeout(&line, absl::Seconds(1))) {
+        auto response = HandleCmd(line);
+        std::cout << response << std::flush;
+        if (response.done) {
+          break;
+        }
+      }
+    }
+  }
+  running = false;
+}
+    
 void GtpClient::NewGame() {
   player_->NewGame();
   MaybeStartPondering();
@@ -197,12 +225,19 @@ GtpClient::Response GtpClient::HandleCmd(const std::string& line) {
   } 
   else if(cmd == "lz-analyze") {
     player_->stop_tree_search_ = false;
-    auto ret = std::async(std::launch::async, &GtpClient::DispatchCmd, this, cmd, args);
-    response = ret.get();
-    return response;
-    
+    //auto ret = std::async(std::launch::async, &GtpClient::DispatchCmd, this, cmd, args);
+    //response = ret.get();
+    ana = absl::make_unique<std::thread>(&GtpClient::DispatchCmd, this, cmd, args);
+    ana->detach();
+    //std::thread ana_thread([this,response, cmd, args]() {
+      //response = DispatchCmd(cmd, args);
+      //return response;
+       // });
+
+    //ana->detach();
   }
   else{
+    //std::cout<<cmd;
     player_->stop_tree_search_ = true;
     response = DispatchCmd(cmd, args);
     return response;
@@ -335,9 +370,9 @@ GtpClient::Response GtpClient::HandleGenmove(CmdArgs args) {
     c = player_->SuggestMove(player_->options().num_readouts);
   }
   //MG_LOG(INFO) << player_->tree().Describe();
-  MG_CHECK(player_->PlayMove(c));
+  //MG_CHECK(player_->PlayMove(c));
 
-  MaybeStartPondering();
+  //MaybeStartPondering();
 
   return Response::Ok(c.ToGtp());
 }
@@ -416,6 +451,14 @@ GtpClient::Response GtpClient::HandleName(CmdArgs args) {
   return Response::Ok(absl::StrCat("minigo-", player_->model()->name()));
 }
 
+GtpClient::Response GtpClient::HandleVersion(CmdArgs args) {
+  auto response = CheckArgsExact(0, args);
+  if (!response.ok) {
+    return response;
+  }
+  return Response::Ok("v17");
+} 
+    
 GtpClient::Response GtpClient::HandlePlay(CmdArgs args) {
   auto response = CheckArgsExact(2, args);
   if (!response.ok) {

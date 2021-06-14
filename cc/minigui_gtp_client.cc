@@ -89,7 +89,7 @@ MiniguiGtpClient::~MiniguiGtpClient() = default;
 void MiniguiGtpClient::NewGame() {
   GtpClient::NewGame();
   variation_tree_ = absl::make_unique<VariationTree>();
-  ReportRootPosition();
+  //ReportRootPosition();
   RefreshPendingWinRateEvals();
 }
 
@@ -133,9 +133,10 @@ GtpClient::Response MiniguiGtpClient::HandleGenmove(CmdArgs args) {
 
 GtpClient::Response MiniguiGtpClient::HandlePlay(CmdArgs args) {
   auto response = GtpClient::HandlePlay(args);
+  
   if (response.ok) {
     variation_tree_->PlayMove(player_->root()->move);
-    ReportRootPosition();
+    //ReportRootPosition();
   }
   RefreshPendingWinRateEvals();
   return response;
@@ -167,15 +168,15 @@ GtpClient::Response MiniguiGtpClient::HandleAnalyze(CmdArgs args) {
   report_search_interval_ = absl::Milliseconds(x);
 
   ReportSearchStatus(nullptr, true);
-
-  auto response = GtpClient::HandleGenmove(args);
+  player_->KeepSearch(player_->options().virtual_losses, player_->options().num_readouts, player_->stop_tree_search_);
+  //auto response = GtpClient::HandleGenmove(args);
   //if (response.ok) {
    // variation_tree_->PlayMove(player_->root()->move);
     //ReportRootPosition();
   //}
-  RefreshPendingWinRateEvals();
+  //RefreshPendingWinRateEvals();
 
-  return response;
+  return  Response::Ok();
 }
 
 

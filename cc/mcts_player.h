@@ -161,6 +161,8 @@ class MctsPlayer {
 
   void TreeSearch(int num_leaves, int max_num_reads, bool stop_tree_search_);
 
+  void KeepSearch(int num_leaves, int max_num_reads, bool stop_tree_search_);
+
   bool stop_tree_search_ = false;
 
   // Protected methods that get exposed for testing.
