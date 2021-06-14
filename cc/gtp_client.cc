@@ -227,7 +227,7 @@ GtpClient::Response GtpClient::HandleCmd(const std::string& line) {
     player_->stop_tree_search_ = false;
     //auto ret = std::async(std::launch::async, &GtpClient::DispatchCmd, this, cmd, args);
     //response = ret.get();
-    ana = absl::make_unique<std::thread>(&GtpClient::DispatchCmd, this, cmd, args);
+    std::thread* ana = new std::thread(&GtpClient::DispatchCmd, this, cmd, args);
     ana->detach();
     //std::thread ana_thread([this,response, cmd, args]() {
       //response = DispatchCmd(cmd, args);

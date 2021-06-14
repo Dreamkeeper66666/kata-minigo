@@ -134,7 +134,7 @@ Coord MctsPlayer::SuggestMove(int new_readouts, bool inject_noise) {
 void MctsPlayer::KeepSearch(int num_leaves, int max_num_reads, bool stop_tree_search_) {
 
   while (!stop_tree_search_) {
-  TreeSearch(int num_leaves, int max_num_reads, bool stop_tree_search_)
+  TreeSearch(num_leaves, max_num_reads, stop_tree_search_);
 }
 }
 
@@ -229,10 +229,6 @@ void MctsPlayer::SelectLeaves(int num_leaves, int max_num_reads) {
 
 void MctsPlayer::ProcessLeaves() {
   if (tree_search_inferences_.empty()) {
-    return;
-  }
-
-  if (stop_tree_search_) {
     return;
   }
 
