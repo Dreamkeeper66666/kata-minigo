@@ -99,14 +99,15 @@ class GtpClient {
     }
 
     friend std::ostream& operator<<(std::ostream& os, const Response& r) {
-      os << r.ok;
+    //  os << r.ok;
       if (r.has_cmd_id) {
         os << r.cmd_id;
       }
-      if (!r.str.empty()) {
-        os << " " << r.str;
-      }
-      return os << "\n\n";
+      if (!r.analyze) {
+        os << "= " << r.str;
+        return os << "\n\n";}
+      else
+        {return os << "";}
     }
 
     // Response to print to stdout.
@@ -117,6 +118,8 @@ class GtpClient {
 
     // True if the Run loop should exit.
     bool done = false;
+      
+    bool analyze = false;
 
     bool has_cmd_id = false;
 
@@ -177,6 +180,7 @@ class GtpClient {
   virtual Response HandleReadouts(CmdArgs args);
   virtual Response HandleShowboard(CmdArgs args);
   virtual Response HandleUndo(CmdArgs args);
+  virtual Response HandleVersion(CmdArgs args);
 
   std::shared_ptr<InferenceCache> inference_cache_;
   std::unique_ptr<MctsPlayer> player_;
