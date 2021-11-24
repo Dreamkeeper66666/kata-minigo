@@ -19,6 +19,9 @@
 #include <cmath>
 #include <sstream>
 #include <utility>
+#include <mutex>
+#include <condition_variable>
+
 
 #include "absl/strings/str_cat.h"
 #include "absl/strings/str_format.h"
@@ -166,9 +169,13 @@ GtpClient::Response MiniguiGtpClient::HandleAnalyze(CmdArgs args) {
     return Response::Error("couldn't parse ", args[0], " as an integer >= 0");
   }
   report_search_interval_ = absl::Milliseconds(x);
+    
 
-  ReportSearchStatus(nullptr, true);
-  player_->KeepSearch(player_->options().virtual_losses, player_->options().num_readouts, player_->stop_tree_search_);
+    std::thread th_analyze([this]() {
+            ReportSearchStatus(nullptr, true);});
+    th_analyze.detach();
+
+  //ReportSearchStatus(nullptr, true);
   //auto response = GtpClient::HandleGenmove(args);
   //if (response.ok) {
    // variation_tree_->PlayMove(player_->root()->move);
@@ -315,18 +322,13 @@ void MiniguiGtpClient::ReportSearchStatus(const MctsNode* leaf,
 
   Coord c = sorted_child_info[0].c;
   const auto child_it = root->children.find(c);
-  if (child_it != root->children.end() && root->child_N(c) != 0) {
-    moveinfo << "info";
-  }
-  else{
+  if (child_it == root->children.end() or root->child_N(c) == 0) {
+   // moveinfo << "info";
     return;
   }
 
-
   // TODO(tommadams): Make the number of child variations sent back
   // configurable.
-
-  
 
   for (int i = 0; i < 20; ++i) {
     Coord c = sorted_child_info[i].c;
@@ -334,10 +336,17 @@ void MiniguiGtpClient::ReportSearchStatus(const MctsNode* leaf,
     if (child_it == root->children.end() || root->child_N(c) == 0) {
       break;
     }
-
-    moveinfo << " move " << c.ToGtp();
+      
+    int winrate;
+    if (player_->root()->position.to_play() == Color::kBlack){
+    winrate = floor(((root->child_Q(c)+1) / 2)*10000);
+    }
+    else{
+    winrate = 10000 - floor(((root->child_Q(c)+1) / 2)*10000);
+    }
+    moveinfo << "info move " << c.ToGtp();
     moveinfo << " visits " << root->child_N(c);
-    moveinfo << " winrate " << ((root->child_Q(c)+1) / 2);
+    moveinfo << " winrate " << winrate;
     moveinfo << " order " << i;
     moveinfo << " pv ";
     moveinfo << c.ToGtp();
@@ -347,9 +356,10 @@ void MiniguiGtpClient::ReportSearchStatus(const MctsNode* leaf,
        moveinfo << " ";
        moveinfo << c.ToGtp();
       }
+    moveinfo << " ";
     }
 
-    MG_LOG(INFO) << moveinfo.str();
+    std::cout << moveinfo.str()<< "\n";
   }
 
 
@@ -617,7 +627,7 @@ void MiniguiGtpClient::WinRateEvaluator::Worker::Run() {
         {"n", player_->root()->N()},
         {"q", GetBestMoveQ(player_->root())},
     };
-    MG_LOG(INFO) << "mg-update:" << j.dump();
+   // MG_LOG(INFO) << "mg-update:" << j.dump();
 
     node->num_eval_reads = player_->root()->N();
     eval_queue_->Push(node);
