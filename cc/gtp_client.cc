@@ -21,6 +21,7 @@
 #include <thread>
 #include <utility>
 #include <future>
+#include <mutex>
 
 #include "absl/strings/numbers.h"
 #include "absl/strings/str_join.h"
@@ -227,16 +228,24 @@ GtpClient::Response GtpClient::HandleCmd(const std::string& line) {
     player_->stop_tree_search_ = false;
     //auto ret = std::async(std::launch::async, &GtpClient::DispatchCmd, this, cmd, args);
     //response = ret.get();
-    std::thread* ana = new std::thread(&GtpClient::DispatchCmd, this, cmd, args);
-    ana->detach();
+    //std::thread* ana = new std::thread(&GtpClient::DispatchCmd, this, cmd, args);
+    response = DispatchCmd(cmd, args);
+    options_.ponder_limit = 9999999;
+    ponder_type_ = PonderType::kReadLimited;
+    ponder_read_count_ = 0;
+    ponder_limit_reached_ = false;
+    //ana->detach();
     //std::thread ana_thread([this,response, cmd, args]() {
       //response = DispatchCmd(cmd, args);
       //return response;
        // });
+    //return Response::Ok();
+    response.analyze=true;
 
     //ana->detach();
   }
   else{
+    ponder_type_ = PonderType::kOff;
     //std::cout<<cmd;
     player_->stop_tree_search_ = true;
     response = DispatchCmd(cmd, args);
@@ -274,7 +283,7 @@ GtpClient::Response GtpClient::DispatchCmd(const std::string& cmd,
                                            CmdArgs args) {
   auto it = cmd_handlers_.find(cmd);
   if (it == cmd_handlers_.end()) {
-    return Response::Error("unknown command");
+    return Response::Error("");
   }
   return it->second(args);
 }
